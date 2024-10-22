@@ -1,0 +1,36 @@
+---
+# SPDX-FileCopyrightText: Copyright (C) SchedMD LLC.
+# SPDX-License-Identifier: Apache-2.0
+
+# https://skaffold.dev/docs/references/yaml/
+apiVersion: skaffold/v4beta1
+kind: Config
+build:
+  artifacts:
+    - image: slinky.slurm.net/slurm-exporter
+      context: ../..
+      docker:
+        dockerfile: Dockerfile.dev
+  tagPolicy:
+    inputDigest: {}
+  local:
+    push: false
+deploy:
+  helm:
+    releases:
+      - name: slurm-exporter
+        chartPath: ./
+        valuesFiles:
+          - ./values-dev.yaml
+        setValueTemplates:
+          exporter.image.repository: '{{.IMAGE_REPO_slinky_slurm_net_slurm_exporter}}'
+          exporter.image.tag: '{{.IMAGE_TAG_slinky_slurm_net_slurm_exporter}}'
+        namespace: slurm
+        createNamespace: true
+# https://skaffold.dev/docs/port-forwarding/
+portForward:
+  - resourceType: service
+    resourceName: slurm-metrics
+    namespace: slurm
+    port: 8080
+    localPort: 8082

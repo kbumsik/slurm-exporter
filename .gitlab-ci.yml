@@ -1,0 +1,115 @@
+---
+
+stages:
+  - test
+  - build
+  - release
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: /certs
+  VERSION: 0.1.0
+  CONTAINER_CI_IMAGE: ${CI_REGISTRY_IMAGE}:${VERSION}
+  CI_JOB_USER: gitlab-ci-token
+
+.docker:
+  image: docker:27.3.0
+  services:
+    - docker:27.3.0-rc.1-dind
+  before_script:
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
+    - apk update && apk upgrade
+    - apk add --no-cache git go helm
+    - export PATH=$PATH:$HOME/go/bin/
+    - go env -w GOPRIVATE=github.com/SlinkyProject/*
+
+test:
+  stage: test
+  extends: .docker
+  script:
+    - apk update && apk upgrade
+    - apk add --no-cache go make bash shellcheck shfmt pre-commit
+    - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    - go install github.com/norwoodj/helm-docs/cmd/helm-docs@latest
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - pre-commit run --all-files --show-diff-on-failure
+    - make codecov
+    - make audit
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - cover.html
+      - govulnreport.txt
+
+build:
+  stage: build
+  extends: .docker
+  script:
+    - go mod vendor
+    - docker build --pull -t $CONTAINER_CI_IMAGE .
+    - helm package helm/${CI_PROJECT_NAME}
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes:
+        - Dockerfile
+        - \'**/*.go\'
+        - go.mod
+        - go.sum
+
+push:
+  stage: build
+  extends: .docker
+  script:
+    - go mod vendor
+    - docker build --pull -t $CONTAINER_CI_IMAGE .
+    - docker push $CONTAINER_CI_IMAGE
+    - export CHART_VERSION=$(grep ^version helm/${CI_PROJECT_NAME}/Chart.yaml | awk '{print $2}')
+    - export CHART_ARTIFACT=${CI_PROJECT_NAME}-${CHART_VERSION}.tgz
+    - helm plugin install https://github.com/chartmuseum/helm-push
+    - helm repo add --username ${CI_JOB_USER} --password ${CI_JOB_TOKEN} ${CI_PROJECT_NAME} ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable
+    - helm repo update
+    - helm package helm/${CI_PROJECT_NAME}
+    - helm cm-push ./${CHART_ARTIFACT} ${CI_PROJECT_NAME}
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - Dockerfile
+        - \'**/*.go\'
+        - go.mod
+        - go.sum
+
+release:
+  stage: release
+  extends: .docker
+  variables:
+    CONTAINER_IMAGE: ${CI_PROJECT_NAME}:${VERSION}
+    CONTAINER_SOURCE_IMAGE: ${CONTAINER_CI_IMAGE}
+    CONTAINER_TARGET_IMAGE: ${DOCKER_REGISTRY}/${CONTAINER_IMAGE}
+  script:
+    - |
+      if [ -z $DOCKER_REGISTRY_PASSWORD ] || [ -z $DOCKER_REGISTRY ] || [ -z $DOCKER_REGISTRY_USER ]; then
+        echo "Runner lacks login info. Either environment variables are not defined, or runner is on an unprotected branch/tag.";
+        exit 1;
+      fi
+    - echo "$DOCKER_REGISTRY_PASSWORD" | docker login $DOCKER_REGISTRY -u $DOCKER_REGISTRY_USER --password-stdin
+    - docker pull $CONTAINER_SOURCE_IMAGE
+    - docker tag $CONTAINER_SOURCE_IMAGE $CONTAINER_TARGET_IMAGE
+    - docker push $CONTAINER_TARGET_IMAGE
+    - export CHART_VERSION=$(grep ^version helm/${CI_PROJECT_NAME}/Chart.yaml | awk '{print $2}')
+    - export CHART_ARTIFACT=${CI_PROJECT_NAME}-${CHART_VERSION}.tgz
+    - helm repo add --username ${CI_JOB_USER} --password ${CI_JOB_TOKEN} ${CI_PROJECT_NAME} ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable
+    - helm repo update
+    - helm pull ${CI_PROJECT_NAME}/${CI_PROJECT_NAME}
+    - helm push ./${CHART_ARTIFACT} oci://${DOCKER_REGISTRY}/charts
+  when: manual
+
+include:
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+secret_detection:
+  allow_failure: false
+  artifacts:
+    when: on_failure
+    expire_in: 7 days
+    paths:
+      - gl-secret-detection-report.json

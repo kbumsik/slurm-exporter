@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Exporter",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceRoot}/cmd/main.go",
+      "args": [
+        "--server", "http://localhost:6820"
+      ],
+      "env": {
+        "METRICS_TOKEN": ""
+      }
+    },
+    {
+      "name": "Test",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/${relativeFileDirname}"
+    }
+  ]
+}
