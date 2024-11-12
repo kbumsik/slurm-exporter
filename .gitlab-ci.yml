@@ -53,7 +53,7 @@ build:
     - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
       changes:
         - Dockerfile
-        - \'**/*.go\'
+        - ./**/*.go
         - go.mod
         - go.sum
 
@@ -75,9 +75,10 @@ push:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
       changes:
         - Dockerfile
-        - \'**/*.go\'
+        - ./**/*.go
         - go.mod
         - go.sum
+        - helm/**/*
 
 release:
   stage: release
