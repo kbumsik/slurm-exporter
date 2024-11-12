@@ -50,7 +50,7 @@ build:
     - docker build --pull -t $CONTAINER_CI_IMAGE .
     - helm package helm/${CI_PROJECT_NAME}
   rules:
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
       changes:
         - Dockerfile
         - \'**/*.go\'
@@ -72,7 +72,7 @@ push:
     - helm package helm/${CI_PROJECT_NAME}
     - helm cm-push ./${CHART_ARTIFACT} ${CI_PROJECT_NAME}
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
       changes:
         - Dockerfile
         - \'**/*.go\'
