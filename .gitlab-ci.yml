@@ -103,7 +103,9 @@ release:
     - helm repo update
     - helm pull ${CI_PROJECT_NAME}/${CI_PROJECT_NAME}
     - helm push ./${CHART_ARTIFACT} oci://${DOCKER_REGISTRY}/charts
-  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
+      when: manual
 
 include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml
