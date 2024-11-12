@@ -1,4 +1,4 @@
-# Building
+# Development
 
 To build, you need to install build dependencies. To do this, install
 [golang](https://go.dev/doc/install) and make.
