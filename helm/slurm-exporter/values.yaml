@@ -53,8 +53,8 @@ exporter:
     #
     # -- (string)
     # Set the image tag to use.
-    # @default -- The Release appVersion.
-    tag: 0.1.0
+    # @default -- The Release version.
+    tag: 0.1.1
   #
   # -- (string)
   # Set the priority class to use.
