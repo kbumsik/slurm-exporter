@@ -50,10 +50,10 @@ build:
     - docker build --pull -t $CONTAINER_CI_IMAGE .
     - helm package helm/${CI_PROJECT_NAME}
   rules:
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
       changes:
         - Dockerfile
-        - \'**/*.go\'
+        - ./**/*.go
         - go.mod
         - go.sum
 
@@ -72,12 +72,13 @@ push:
     - helm package helm/${CI_PROJECT_NAME}
     - helm cm-push ./${CHART_ARTIFACT} ${CI_PROJECT_NAME}
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
       changes:
         - Dockerfile
-        - \'**/*.go\'
+        - ./**/*.go
         - go.mod
         - go.sum
+        - helm/**/*
 
 release:
   stage: release
@@ -102,7 +103,9 @@ release:
     - helm repo update
     - helm pull ${CI_PROJECT_NAME}/${CI_PROJECT_NAME}
     - helm push ./${CHART_ARTIFACT} oci://${DOCKER_REGISTRY}/charts
-  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
+      when: manual
 
 include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml

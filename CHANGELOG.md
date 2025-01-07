@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.1.0
+## \[Unreleased\]
 
-- Initial project release.
+### Added
+
+- Added container image labels.
+
+### Fixed
+
+### Changed
+
+### Removed
