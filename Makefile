@@ -139,22 +139,20 @@ tidy: ## Run go mod tidy against code
 vet: ## Run go vet against code.
 	go vet ./...
 
-CODECOV ?= 91.0
+CODECOV_PERCENT ?= 91
 
 .PHONY: test
 test: ## Run tests.
-	rm -f cover.out cover.html ## remove files that we will generate
-	go test `go list ./...` -v -coverprofile cover.out
+	rm -f cover.out cover.html
+	go test -v -coverprofile cover.out ./...
+	go tool cover -func cover.out
 	go tool cover -html cover.out -o cover.html
-
-codecov: test ## Compare code coverage for being over 80%
 	@percentage=$$(go tool cover -func=cover.out | grep ^total | awk '{print $$3}' | tr -d '%'); \
-	if [ $$(echo "$$percentage < $(CODECOV)" | bc -l) -eq 1 ]; then \
-		echo "The total percentage ($$percentage%) is less than $(CODECOV)%.";  \
-		exit 1; \
-	else \
-		echo "The total percentage ($$percentage%) is greater than or equal to $(CODECOV)%."; \
-	fi
+		if (( $$(echo "$$percentage < $(CODECOV_PERCENT)" | bc -l) )); then \
+			echo "----------"; \
+			echo "Total test coverage ($${percentage}%) is less than the coverage threshold ($(CODECOV_PERCENT)%)."; \
+			exit 1; \
+		fi
 
 .PHONY: vuln-scan
 vuln-scan: ## Run vulnerability scanning tool
