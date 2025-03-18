@@ -106,14 +106,14 @@ type SlurmCollector struct {
 }
 
 // Initialize the slurm client to talk to slurmrestd.
-// Requires that the env METRICS_TOKEN is set.
+// Requires that the env SLURM_JWT is set.
 func (r *SlurmCollector) SlurmClient() error {
 	ctx := context.Background()
 	log := log.FromContext(ctx)
 
-	token, ok := os.LookupEnv("METRICS_TOKEN")
+	token, ok := os.LookupEnv("SLURM_JWT")
 	if !ok || token == "" {
-		return errors.New("METRICS_TOKEN must be defined and not empty")
+		return errors.New("SLURM_JWT must be defined and not empty")
 	}
 
 	// Create slurm client

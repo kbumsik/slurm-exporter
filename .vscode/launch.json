@@ -11,7 +11,7 @@
         "--server", "http://localhost:6820"
       ],
       "env": {
-        "METRICS_TOKEN": ""
+        "SLURM_JWT": ""
       }
     },
     {

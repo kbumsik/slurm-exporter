@@ -67,7 +67,7 @@ func newFakeClientList(interceptorFuncs interceptor.Funcs, initObjLists ...objec
 // TestSlurmParse will test that slurmParse() correctly calculates the
 // metrics for a predefined cache of Slurm objects.
 func TestSlurmParse(t *testing.T) {
-	os.Setenv("METRICS_TOKEN", "foo")
+	os.Setenv("SLURM_JWT", "foo")
 	sc := NewSlurmCollector(name, exporter_url, cacheFreq, false)
 
 	jobs := &slurmtypes.JobInfoList{}
@@ -103,17 +103,17 @@ func TestSlurmParse(t *testing.T) {
 // TestSlurmClient will test how SlurmClient() initializes
 // a Slurm client.
 func TestSlurmClient(t *testing.T) {
-	os.Unsetenv("METRICS_TOKEN")
+	os.Unsetenv("SLURM_JWT")
 	sc := NewSlurmCollector(name, exporter_url, cacheFreq, false)
 	err := sc.SlurmClient()
 	assert.NotNil(t, err)
 
-	os.Setenv("METRICS_TOKEN", "")
+	os.Setenv("SLURM_JWT", "")
 	sc = NewSlurmCollector(name, exporter_url, cacheFreq, false)
 	err = sc.SlurmClient()
 	assert.NotNil(t, err)
 
-	os.Setenv("METRICS_TOKEN", "foo")
+	os.Setenv("SLURM_JWT", "foo")
 	sc = NewSlurmCollector(name, "", cacheFreq, false)
 	err = sc.SlurmClient()
 	assert.NotNil(t, err)

@@ -64,7 +64,7 @@ spec:
             tcpSocket:
               port: metrics
           env:
-          - name: METRICS_TOKEN
+          - name: SLURM_JWT
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.exporter.secretName }}
