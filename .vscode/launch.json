@@ -8,11 +8,11 @@
       "mode": "auto",
       "program": "${workspaceRoot}/cmd/main.go",
       "args": [
+        "--zap-log-level=5",
         "--server", "http://localhost:6820"
       ],
-      "env": {
-        "SLURM_JWT": ""
-      }
+      "preLaunchTask": "Fetch SLURM_JWT",
+      "envFile": "/tmp/slurm-exporter.env"
     },
     {
       "name": "Test",

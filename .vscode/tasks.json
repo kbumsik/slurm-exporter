@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Fetch SLURM_JWT",
+      "type": "shell",
+      "command": [
+        "export SLURM_JWT=\"$(kubectl --namespace=slurm get secrets slurm-token-slurm -o jsonpath=\"{.data.auth-token}\" | base64 --decode)\" &&",
+        "echo \"SLURM_JWT=$SLURM_JWT\" >/tmp/slurm-exporter.env"
+      ],
+      "presentation": {
+        "reveal": "never",
+        "panel": "shared"
+      }
+    }
+  ]
+}
