@@ -135,6 +135,11 @@ fmt: ## Run go fmt against code.
 tidy: ## Run go mod tidy against code
 	go mod tidy
 
+.PHONY: get-u
+get-u: ## Run `go get -u`
+	go get -u ./...
+	$(MAKE) tidy
+
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
