@@ -56,10 +56,16 @@ help: ## Display this help.
 .PHONY: all
 all: build ## Build slurm-exporter.
 
+REGISTRY ?= slinky.slurm.net
+
 .PHONY: build
 build: fmt tidy vet ## Build manager binary.
-	go build -o bin/exporter cmd/main.go
+	$(MAKE) docker-build IMG="$(REGISTRY)/slurm-exporter:$(VERSION)"
 	helm package helm/slurm-exporter --destination helm/slurm-exporter
+
+.PHONY: push
+push: build ## Push container images.
+	$(MAKE) docker-push IMG="$(REGISTRY)/slurm-exporter:$(VERSION)"
 
 .PHONY: clean
 clean: ## Clean executable files.
