@@ -63,11 +63,11 @@ build: fmt tidy vet ## Build manager binary.
 
 .PHONY: clean
 clean: ## Clean executable files.
-	chmod -R u+w bin/ # make test installs files without write permissions.
+	@ chmod -R -f u+w bin/ || true # make test installs files without write permissions.
 	rm -rf bin/
 	rm -f govulnreport.txt
 	rm -f cover.out cover.html
-	rm helm/slurm-exporter/*.tgz
+	rm -f helm/slurm-exporter/*.tgz
 
 .PHONY: run
 run: fmt tidy vet ## Run the exporter from your host.
