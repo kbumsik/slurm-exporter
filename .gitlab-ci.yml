@@ -16,7 +16,7 @@ stages:
 variables:
   DOCKER_HOST: tcp://docker:2376
   DOCKER_TLS_CERTDIR: /certs
-  VERSION: 0.1.0
+  VERSION: 0.2.0
   CONTAINER_CI_IMAGE: ${CI_REGISTRY_IMAGE}:${VERSION}
   CI_JOB_USER: gitlab-ci-token
 

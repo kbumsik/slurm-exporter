@@ -36,7 +36,7 @@ LABEL org.opencontainers.image.authors="slinky@schedmd.com" \
       org.opencontainers.image.documentation="https://github.com/SlinkyProject/slurm-exporter" \
       org.opencontainers.image.license="Apache-2.0" \
       org.opencontainers.image.vendor="SchedMD LLC." \
-      org.opencontainers.image.version="v0.1.1" \
+      org.opencontainers.image.version="v0.2.0" \
       org.opencontainers.image.source="https://github.com/SlinkyProject/slurm-exporter"
 
 # HasRequiredLabel requirement from Red Hat OpenShift Software Certification
@@ -45,7 +45,7 @@ LABEL name="Slurm Exporter" \
       summary="Prometheus collector and exporter for metrics extracted from Slurm " \
       description="Prometheus collector and exporter for metrics extracted from Slurm" \
       vendor="SchedMD LLC." \
-      version="v0.1.1" \
+      version="v0.2.0" \
       release="https://github.com/SlinkyProject/slurm-exporter"
 
 WORKDIR /
