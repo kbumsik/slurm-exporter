@@ -5,16 +5,26 @@
 # https://skaffold.dev/docs/references/yaml/
 apiVersion: skaffold/v4beta1
 kind: Config
-build:
-  artifacts:
-    - image: slinky.slurm.net/slurm-exporter
-      context: ../..
-      docker:
-        dockerfile: Dockerfile.dev
-  tagPolicy:
-    inputDigest: {}
-  local:
-    push: false
+profiles:
+  - name: dev
+    build:
+      artifacts:
+        - image: slinky.slurm.net/slurm-exporter
+          context: ../../
+          docker:
+            dockerfile: Dockerfile
+    deploy:
+      helm:
+        releases:
+          - name: slurm-exporter
+            chartPath: ./
+            valuesFiles:
+              - ./values-dev.yaml
+            setValueTemplates:
+              exporter.image.repository: '{{.IMAGE_REPO_slinky_slurm_net_slurm_exporter}}'
+              exporter.image.tag: '{{.IMAGE_TAG_slinky_slurm_net_slurm_exporter}}'
+            namespace: slurm
+            createNamespace: true
 deploy:
   helm:
     releases:
@@ -22,9 +32,6 @@ deploy:
         chartPath: ./
         valuesFiles:
           - ./values-dev.yaml
-        setValueTemplates:
-          exporter.image.repository: '{{.IMAGE_REPO_slinky_slurm_net_slurm_exporter}}'
-          exporter.image.tag: '{{.IMAGE_TAG_slinky_slurm_net_slurm_exporter}}'
         namespace: slurm
         createNamespace: true
 # https://skaffold.dev/docs/port-forwarding/

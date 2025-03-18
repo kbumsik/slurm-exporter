@@ -46,7 +46,6 @@ build:
   stage: build
   extends: .docker
   script:
-    - go mod vendor
     - docker build --pull -t $CONTAINER_CI_IMAGE .
     - helm package helm/${CI_PROJECT_NAME}
   rules:
@@ -61,7 +60,6 @@ push:
   stage: build
   extends: .docker
   script:
-    - go mod vendor
     - docker build --pull -t $CONTAINER_CI_IMAGE .
     - docker push $CONTAINER_CI_IMAGE
     - export CHART_VERSION=$(grep ^version helm/${CI_PROJECT_NAME}/Chart.yaml | awk '{print $2}')

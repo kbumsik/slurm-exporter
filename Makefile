@@ -65,7 +65,6 @@ build: fmt tidy vet ## Build manager binary.
 clean: ## Clean executable files.
 	chmod -R u+w bin/ # make test installs files without write permissions.
 	rm -rf bin/
-	rm -rf vendor/
 	rm -f govulnreport.txt
 	rm -f cover.out cover.html
 	rm helm/slurm-exporter/*.tgz
@@ -139,10 +138,6 @@ tidy: ## Run go mod tidy against code
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
-
-.PHONY: vendor
-vendor: ## Generate the vendor/ dir.
-	go work vendor || go mod vendor
 
 CODECOV ?= 91.0
 
