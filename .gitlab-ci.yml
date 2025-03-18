@@ -57,7 +57,7 @@ build:
     - docker build --pull -t $CONTAINER_CI_IMAGE .
     - helm package helm/${CI_PROJECT_NAME}
   rules:
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
+    - if: $CI_COMMIT_REF_PROTECTED != "true"
       changes:
         - Dockerfile
         - ./**/*.go
@@ -78,7 +78,7 @@ push:
     - helm package helm/${CI_PROJECT_NAME}
     - helm cm-push ./${CHART_ARTIFACT} ${CI_PROJECT_NAME}
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
       changes:
         - Dockerfile
         - ./**/*.go
@@ -110,7 +110,7 @@ release:
     - helm pull ${CI_PROJECT_NAME}/${CI_PROJECT_NAME}
     - helm push ./${CHART_ARTIFACT} oci://${DOCKER_REGISTRY}/charts
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^release-.*/
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
 
 include:
