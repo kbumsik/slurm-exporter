@@ -74,11 +74,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	slurmCollector := exporter.NewSlurmCollector(flags.server, flags.cacheFreq, flags.perUserMetrics)
-	if err := slurmCollector.SlurmClient(); err != nil {
-		setupLog.Error(err, "could not start slurm client")
+	slurmClient, err := exporter.NewSlurmClient(flags.server, flags.cacheFreq)
+	if err != nil {
+		setupLog.Error(err, "could not create slurm client")
 		os.Exit(1)
 	}
+	slurmCollector := exporter.NewSlurmCollector(slurmClient, flags.perUserMetrics)
 	prometheus.MustRegister(slurmCollector)
 
 	setupLog.Info("starting exporter")

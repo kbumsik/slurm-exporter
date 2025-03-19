@@ -71,8 +71,6 @@ type slurmData struct {
 
 type SlurmCollector struct {
 	slurmClient    client.Client
-	server         string
-	cacheFreq      time.Duration
 	perUserMetrics bool
 
 	partitionNodes           *prometheus.Desc
@@ -105,18 +103,18 @@ type SlurmCollector struct {
 
 // Initialize the slurm client to talk to slurmrestd.
 // Requires that the env SLURM_JWT is set.
-func (r *SlurmCollector) SlurmClient() error {
+func NewSlurmClient(server string, cacheFreq time.Duration) (client.Client, error) {
 	ctx := context.Background()
 	log := log.FromContext(ctx)
 
 	token, ok := os.LookupEnv("SLURM_JWT")
 	if !ok || token == "" {
-		return errors.New("SLURM_JWT must be defined and not empty")
+		return nil, errors.New("SLURM_JWT must be defined and not empty")
 	}
 
 	// Create slurm client
 	config := &client.Config{
-		Server:    r.server,
+		Server:    server,
 		AuthToken: token,
 	}
 
@@ -127,21 +125,19 @@ func (r *SlurmCollector) SlurmClient() error {
 			&slurmtypes.V0041Node{},
 			&slurmtypes.V0041JobInfo{},
 		},
-		CacheSyncPeriod: r.cacheFreq,
+		CacheSyncPeriod: cacheFreq,
 	}
 	slurmClient, err := client.NewClient(config, &clientOptions)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	r.slurmClient = slurmClient
-
 	// Start client cache
-	go r.slurmClient.Start(ctx)
+	go slurmClient.Start(ctx)
 
 	log.Info("Created slurm client")
 
-	return nil
+	return slurmClient, nil
 }
 
 // slurmCollect will read slurm objects from slurmrestd and return slurmData to represent
@@ -294,14 +290,9 @@ func (r *SlurmCollector) slurmParse(
 	return slurmData
 }
 
-func NewSlurmCollector(
-	server string,
-	cacheFreq time.Duration,
-	perUserMetrics bool,
-) *SlurmCollector {
+func NewSlurmCollector(slurmClient client.Client, perUserMetrics bool) *SlurmCollector {
 	return &SlurmCollector{
-		server:                   server,
-		cacheFreq:                cacheFreq,
+		slurmClient:              slurmClient,
 		perUserMetrics:           perUserMetrics,
 		partitionNodes:           prometheus.NewDesc("slurm_partition_nodes", "Number of nodes in a slurm partition", partitionLabel, nil),
 		partitionCpus:            prometheus.NewDesc("slurm_partition_cpus", "Number of CPUs in a slurm partition", partitionLabel, nil),
