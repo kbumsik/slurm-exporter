@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/SlinkyProject/slurm-client/pkg/client"
-	"github.com/SlinkyProject/slurm-client/pkg/fake"
+	"github.com/SlinkyProject/slurm-client/pkg/client/fake"
 )
 
 func TestNewClusters(t *testing.T) {

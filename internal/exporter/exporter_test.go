@@ -15,8 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/SlinkyProject/slurm-client/pkg/client"
-	"github.com/SlinkyProject/slurm-client/pkg/fake"
-	"github.com/SlinkyProject/slurm-client/pkg/interceptor"
+	"github.com/SlinkyProject/slurm-client/pkg/client/fake"
+	"github.com/SlinkyProject/slurm-client/pkg/client/interceptor"
 	"github.com/SlinkyProject/slurm-client/pkg/object"
 
 	slurmtypes "github.com/SlinkyProject/slurm-client/pkg/types"
@@ -37,9 +37,9 @@ var (
 func newSlurmCollectorHelper() SlurmCollector {
 	sc := NewSlurmCollector(name, exporter_url, cacheFreq, true)
 
-	jobs := &slurmtypes.JobInfoList{}
-	partitions := &slurmtypes.PartitionInfoList{}
-	nodes := &slurmtypes.NodeList{}
+	jobs := &slurmtypes.V0041JobInfoList{}
+	partitions := &slurmtypes.V0041PartitionInfoList{}
+	nodes := &slurmtypes.V0041NodeList{}
 
 	jobs.AppendItem(jobInfoA)
 	jobs.AppendItem(jobInfoB)
@@ -70,9 +70,9 @@ func TestSlurmParse(t *testing.T) {
 	os.Setenv("SLURM_JWT", "foo")
 	sc := NewSlurmCollector(name, exporter_url, cacheFreq, false)
 
-	jobs := &slurmtypes.JobInfoList{}
-	partitions := &slurmtypes.PartitionInfoList{}
-	nodes := &slurmtypes.NodeList{}
+	jobs := &slurmtypes.V0041JobInfoList{}
+	partitions := &slurmtypes.V0041PartitionInfoList{}
+	nodes := &slurmtypes.V0041NodeList{}
 
 	jobs.AppendItem(jobInfoA)
 	jobs.AppendItem(jobInfoB)
@@ -132,9 +132,9 @@ func TestSlurmCollectType(t *testing.T) {
 
 	sc := newSlurmCollectorHelper()
 
-	jobsTest := &slurmtypes.JobInfoList{}
-	partitionsTest := &slurmtypes.PartitionInfoList{}
-	nodesTest := &slurmtypes.NodeList{}
+	jobsTest := &slurmtypes.V0041JobInfoList{}
+	partitionsTest := &slurmtypes.V0041PartitionInfoList{}
+	nodesTest := &slurmtypes.V0041NodeList{}
 
 	err := sc.slurmCollectType(jobsTest)
 	assert.Equal(t, nil, err)
@@ -168,7 +168,7 @@ func TestCollect(t *testing.T) {
 
 	interceptorFunc := interceptor.Funcs{
 		List: func(ctx context.Context, list object.ObjectList, opts ...client.ListOption) error {
-			if list.GetType() == slurmtypes.ObjectTypeNode {
+			if list.GetType() == slurmtypes.ObjectTypeV0041Node {
 				return errors.New("error")
 			}
 			return nil
@@ -179,7 +179,7 @@ func TestCollect(t *testing.T) {
 
 	interceptorFunc = interceptor.Funcs{
 		List: func(ctx context.Context, list object.ObjectList, opts ...client.ListOption) error {
-			if list.GetType() == slurmtypes.ObjectTypeJobInfo {
+			if list.GetType() == slurmtypes.ObjectTypeV0041JobInfo {
 				return errors.New("error")
 			}
 			return nil
@@ -190,7 +190,7 @@ func TestCollect(t *testing.T) {
 
 	interceptorFunc = interceptor.Funcs{
 		List: func(ctx context.Context, list object.ObjectList, opts ...client.ListOption) error {
-			if list.GetType() == slurmtypes.ObjectTypePartitionInfo {
+			if list.GetType() == slurmtypes.ObjectTypeV0041PartitionInfo {
 				return errors.New("error")
 			}
 			return nil

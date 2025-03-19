@@ -9,13 +9,15 @@ import (
 	"os"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	api "github.com/SlinkyProject/slurm-client/api/v0041"
 	"github.com/SlinkyProject/slurm-client/pkg/client"
 	"github.com/SlinkyProject/slurm-client/pkg/object"
 	slurmtypes "github.com/SlinkyProject/slurm-client/pkg/types"
-	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/SlinkyProject/slurm-exporter/internal/resources"
 )
@@ -30,7 +32,7 @@ type PartitionData struct {
 	Nodes           int32
 	Cpus            int32
 	PendingJobs     int32
-	PendingMaxNodes int64
+	PendingMaxNodes int32
 	RunningJobs     int32
 	HoldJobs        int32
 	Jobs            int32
@@ -125,9 +127,9 @@ func (r *SlurmCollector) SlurmClient() error {
 	// Instruct the client to keep a cache of slurm objects
 	clientOptions := client.ClientOptions{
 		EnableFor: []object.Object{
-			&slurmtypes.PartitionInfo{},
-			&slurmtypes.Node{},
-			&slurmtypes.JobInfo{},
+			&slurmtypes.V0041PartitionInfo{},
+			&slurmtypes.V0041Node{},
+			&slurmtypes.V0041JobInfo{},
 		},
 		CacheSyncPeriod: r.cacheFreq,
 	}
@@ -163,9 +165,10 @@ func (r *SlurmCollector) slurmCollectType(list object.ObjectList) error {
 // slurmParse will return slurmData to represent partition, node, and job
 // information of the running slurm cluster.
 func (r *SlurmCollector) slurmParse(
-	jobs *slurmtypes.JobInfoList,
-	nodes *slurmtypes.NodeList,
-	partitions *slurmtypes.PartitionInfoList) slurmData {
+	jobs *slurmtypes.V0041JobInfoList,
+	nodes *slurmtypes.V0041NodeList,
+	partitions *slurmtypes.V0041PartitionInfoList,
+) slurmData {
 
 	ctx := context.Background()
 	log := log.FromContext(ctx)
@@ -177,56 +180,59 @@ func (r *SlurmCollector) slurmParse(
 	// and nodes.
 	partitionData := make(map[string]*PartitionData)
 	for _, p := range partitions.Items {
-		_, key := partitionData[p.Name]
-		if !key {
-			partitionData[p.Name] = &PartitionData{}
+		key := string(p.GetKey())
+		_, ok := partitionData[key]
+		if !ok {
+			partitionData[key] = &PartitionData{}
 		}
-		partitionData[p.Name].Cpus = p.Cpus
-		partitionData[p.Name].Nodes = p.Nodes
+		partitionData[key].Cpus = ptr.Deref(p.Cpus.Total, 0)
+		partitionData[key].Nodes = ptr.Deref(p.Nodes.Total, 0)
 	}
 
 	// Populate nodeData indexed by node with the number of cpus
 	// and how many are allocated/idle.
 	nodeData := make(map[string]*NodeData)
 	for _, n := range nodes.Items {
-		_, key := nodeData[n.Name]
-		if !key {
-			nodeData[n.Name] = &NodeData{}
+		key := string(n.GetKey())
+		_, ok := nodeData[key]
+		if !ok {
+			nodeData[key] = &NodeData{}
 		}
-		nodeData[n.Name].Cpus = n.Cpus
-		nodeData[n.Name].Alloc = n.AllocCpus
-		nodeData[n.Name].Idle = n.AllocIdleCpus
+		nodeData[key].Cpus = ptr.Deref(n.Cpus, 0)
+		nodeData[key].Alloc = ptr.Deref(n.AllocCpus, 0)
+		nodeData[key].Idle = ptr.Deref(n.AllocIdleCpus, 0)
 
-		for _, s := range n.State.UnsortedList() {
+		for _, s := range n.GetStateAsSet().UnsortedList() {
 			switch s {
-			case slurmtypes.NodeStateALLOCATED:
+			case api.V0041NodeStateALLOCATED:
 				ns.allocated++
-			case slurmtypes.NodeStateCOMPLETING:
+			case api.V0041NodeStateCOMPLETING:
 				ns.completing++
-			case slurmtypes.NodeStateDOWN:
+			case api.V0041NodeStateDOWN:
 				ns.down++
-			case slurmtypes.NodeStateDRAIN:
+			case api.V0041NodeStateDRAIN:
 				ns.drain++
-			case slurmtypes.NodeStateERROR:
+			case api.V0041NodeStateERROR:
 				ns.err++
-			case slurmtypes.NodeStateIDLE:
+			case api.V0041NodeStateIDLE:
 				ns.idle++
-			case slurmtypes.NodeStateMAINTENANCE:
+			case api.V0041NodeStateMAINTENANCE:
 				ns.maintenance++
-			case slurmtypes.NodeStateMIXED:
+			case api.V0041NodeStateMIXED:
 				ns.mixed++
-			case slurmtypes.NodeStateRESERVED:
+			case api.V0041NodeStateRESERVED:
 				ns.reserved++
 			}
 		}
 
 		// Update partitionData with per node information as this
 		// is not yet available with the /partitions endpoint.
-		for _, p := range n.Partitions.UnsortedList() {
-			_, key := partitionData[p]
-			if key {
-				partitionData[p].Alloc += nodeData[n.Name].Alloc
-				partitionData[p].Idle += nodeData[n.Name].Idle
+		partitions := ptr.Deref(n.Partitions, api.V0041CsvString{})
+		for _, p := range partitions {
+			_, ok := partitionData[p]
+			if ok {
+				partitionData[p].Alloc += nodeData[key].Alloc
+				partitionData[p].Idle += nodeData[key].Idle
 			}
 		}
 	}
@@ -235,45 +241,51 @@ func (r *SlurmCollector) slurmParse(
 	// they have and their various states.
 	jobData := make(map[string]*JobData)
 	for _, j := range jobs.Items {
-
-		if _, key := jobData[j.UserName]; !key {
-			jobData[j.UserName] = &JobData{}
+		userName := ptr.Deref(j.UserName, "")
+		partition := ptr.Deref(j.Partition, "")
+		if _, key := jobData[userName]; !key {
+			jobData[userName] = &JobData{}
 		}
-		if _, key := partitionData[j.Partition]; !key {
+		if _, key := partitionData[partition]; !key {
 			log.Info("No partition found for job")
 			continue
 		}
 		// Update partitionData with the number of jobs scheduled
-		if !j.JobState.HasAny(
-			slurmtypes.JobInfoJobStateCOMPLETED,
-			slurmtypes.JobInfoJobStateCOMPLETING,
-			slurmtypes.JobInfoJobStateCANCELLED) {
-			partitionData[j.Partition].Jobs++
-			jobData[j.UserName].Count++
+		if !j.GetStateAsSet().HasAny(
+			api.V0041JobInfoJobStateCOMPLETED,
+			api.V0041JobInfoJobStateCOMPLETING,
+			api.V0041JobInfoJobStateCANCELLED) {
+			partitionData[partition].Jobs++
+			jobData[userName].Count++
 		}
-		if j.JobState.HasAll(slurmtypes.JobInfoJobStatePENDING) &&
-			!j.Hold {
-			partitionData[j.Partition].PendingJobs++
-			jobData[j.UserName].Pending++
+		isHold := ptr.Deref(j.Hold, false)
+		if j.GetStateAsSet().HasAll(api.V0041JobInfoJobStatePENDING) &&
+			!isHold {
+			partitionData[partition].PendingJobs++
+			jobData[userName].Pending++
 		}
-		if j.JobState.HasAll(slurmtypes.JobInfoJobStateRUNNING) {
-			partitionData[j.Partition].RunningJobs++
-			jobData[j.UserName].Running++
+		if j.GetStateAsSet().HasAll(api.V0041JobInfoJobStateRUNNING) {
+			partitionData[partition].RunningJobs++
+			jobData[userName].Running++
 		}
-		if j.Hold {
-			partitionData[j.Partition].HoldJobs++
-			jobData[j.UserName].Hold++
+		if isHold {
+			partitionData[partition].HoldJobs++
+			jobData[userName].Hold++
 		}
 		// Track total pending nodes for a partition for jobs that
 		// meet the criterea below. This exposes metrics that may be
 		// used for autoscaling. Jobs with an eligible date greater
 		// than one year are ignored.
-		if j.JobState.HasAll(slurmtypes.JobInfoJobStatePENDING) &&
-			j.EligibleTime >= 0 &&
-			time.Unix(j.EligibleTime, 0).After(time.Now().AddDate(-1, 0, 0)) &&
-			!j.Hold {
-			if partitionData[j.Partition].PendingMaxNodes < j.NodeCount {
-				partitionData[j.Partition].PendingMaxNodes = j.NodeCount
+		eligibleTimeNoVal := ptr.Deref(j.EligibleTime, api.V0041Uint64NoValStruct{})
+		eligibleTime := ptr.Deref(eligibleTimeNoVal.Number, 0)
+		if j.GetStateAsSet().HasAll(api.V0041JobInfoJobStatePENDING) &&
+			eligibleTime >= 0 &&
+			time.Unix(eligibleTime, 0).After(time.Now().AddDate(-1, 0, 0)) &&
+			!isHold {
+			nodeCountNoVal := ptr.Deref(j.NodeCount, api.V0041Uint32NoValStruct{})
+			nodeCount := ptr.Deref(nodeCountNoVal.Number, 0)
+			if partitionData[partition].PendingMaxNodes < nodeCount {
+				partitionData[partition].PendingMaxNodes = nodeCount
 			}
 		}
 	}
@@ -365,17 +377,17 @@ func (s *SlurmCollector) Collect(ch chan<- prometheus.Metric) {
 	log.Info("Collecting slurm data.")
 
 	// Read slurm information from cache
-	nodes := &slurmtypes.NodeList{}
+	nodes := &slurmtypes.V0041NodeList{}
 	if err := s.slurmCollectType(nodes); err != nil {
 		log.Error(err, "Could not list nodes")
 		return
 	}
-	jobs := &slurmtypes.JobInfoList{}
+	jobs := &slurmtypes.V0041JobInfoList{}
 	if err := s.slurmCollectType(jobs); err != nil {
 		log.Error(err, "Could not list jobs")
 		return
 	}
-	partitions := &slurmtypes.PartitionInfoList{}
+	partitions := &slurmtypes.V0041PartitionInfoList{}
 	if err := s.slurmCollectType(partitions); err != nil {
 		log.Error(err, "Could not list partitions")
 		return

@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.23.5
 
 require (
-	github.com/SlinkyProject/slurm-client v0.1.0-20241108145209-7bfdd4923f75
+	github.com/SlinkyProject/slurm-client v0.1.0-20241108145209-7bfdd4923f75.0.20250314133138-c4b382f1bf73
 	github.com/prometheus/client_golang v1.21.1
 	github.com/stretchr/testify v1.10.0
 	k8s.io/apimachinery v0.32.3
@@ -37,8 +37,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
