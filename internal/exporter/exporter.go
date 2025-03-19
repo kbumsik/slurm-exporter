@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -18,8 +17,6 @@ import (
 	"github.com/SlinkyProject/slurm-client/pkg/client"
 	"github.com/SlinkyProject/slurm-client/pkg/object"
 	slurmtypes "github.com/SlinkyProject/slurm-client/pkg/types"
-
-	"github.com/SlinkyProject/slurm-exporter/internal/resources"
 )
 
 var (
@@ -73,8 +70,7 @@ type slurmData struct {
 }
 
 type SlurmCollector struct {
-	slurmClusters  *resources.Clusters
-	name           types.NamespacedName
+	slurmClient    client.Client
 	server         string
 	cacheFreq      time.Duration
 	perUserMetrics bool
@@ -138,9 +134,12 @@ func (r *SlurmCollector) SlurmClient() error {
 		return err
 	}
 
-	// Add slurm client
-	r.slurmClusters.Add(r.name, slurmClient)
-	log.Info("Added slurm cluster client", "clusterName", r.name)
+	r.slurmClient = slurmClient
+
+	// Start client cache
+	go r.slurmClient.Start(ctx)
+
+	log.Info("Created slurm client")
 
 	return nil
 }
@@ -152,9 +151,7 @@ func (r *SlurmCollector) slurmCollectType(list object.ObjectList) error {
 	log := log.FromContext(ctx)
 
 	// Read slurm information from cache
-	slurmCluster := r.slurmClusters.Get(r.name)
-	err := slurmCluster.List(ctx, list)
-	if err != nil {
+	if err := r.slurmClient.List(ctx, list); err != nil {
 		log.Error(err, "Could not list objects")
 		return err
 	}
@@ -298,15 +295,12 @@ func (r *SlurmCollector) slurmParse(
 }
 
 func NewSlurmCollector(
-	name types.NamespacedName,
 	server string,
 	cacheFreq time.Duration,
 	perUserMetrics bool,
 ) *SlurmCollector {
 	return &SlurmCollector{
-		slurmClusters:            resources.NewClusters(),
 		server:                   server,
-		name:                     name,
 		cacheFreq:                cacheFreq,
 		perUserMetrics:           perUserMetrics,
 		partitionNodes:           prometheus.NewDesc("slurm_partition_nodes", "Number of nodes in a slurm partition", partitionLabel, nil),

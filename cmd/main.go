@@ -12,7 +12,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"k8s.io/apimachinery/pkg/types"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,11 +74,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	name := types.NamespacedName{
-		Namespace: "",
-		Name:      "exporter",
-	}
-	slurmCollector := exporter.NewSlurmCollector(name, flags.server, flags.cacheFreq, flags.perUserMetrics)
+	slurmCollector := exporter.NewSlurmCollector(flags.server, flags.cacheFreq, flags.perUserMetrics)
 	if err := slurmCollector.SlurmClient(); err != nil {
 		setupLog.Error(err, "could not start slurm client")
 		os.Exit(1)

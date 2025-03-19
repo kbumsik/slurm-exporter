@@ -12,7 +12,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/SlinkyProject/slurm-client/pkg/client"
 	"github.com/SlinkyProject/slurm-client/pkg/client/fake"
@@ -24,18 +23,14 @@ import (
 
 var (
 	exporter_url = "http://localhost:8080"
-	name         = types.NamespacedName{
-		Namespace: "default",
-		Name:      "exporter_test",
-	}
-	cacheFreq = 5 * time.Second
+	cacheFreq    = 5 * time.Second
 )
 
 // newSlurmCollectorHelper will initialize a Slurm Collector for
 // metrics and will also load a predefined set of objects into
 // the cache of a fake Slurm client.
 func newSlurmCollectorHelper() SlurmCollector {
-	sc := NewSlurmCollector(name, exporter_url, cacheFreq, true)
+	sc := NewSlurmCollector(exporter_url, cacheFreq, true)
 
 	jobs := &slurmtypes.V0041JobInfoList{}
 	partitions := &slurmtypes.V0041PartitionInfoList{}
@@ -50,8 +45,7 @@ func newSlurmCollectorHelper() SlurmCollector {
 	nodes.AppendItem(nodeB)
 	nodes.AppendItem(nodeC)
 
-	client := newFakeClientList(interceptor.Funcs{}, jobs, partitions, nodes)
-	sc.slurmClusters.Add(name, client)
+	sc.slurmClient = newFakeClientList(interceptor.Funcs{}, jobs, partitions, nodes)
 	return *sc
 }
 
@@ -68,7 +62,7 @@ func newFakeClientList(interceptorFuncs interceptor.Funcs, initObjLists ...objec
 // metrics for a predefined cache of Slurm objects.
 func TestSlurmParse(t *testing.T) {
 	os.Setenv("SLURM_JWT", "foo")
-	sc := NewSlurmCollector(name, exporter_url, cacheFreq, false)
+	sc := NewSlurmCollector(exporter_url, cacheFreq, false)
 
 	jobs := &slurmtypes.V0041JobInfoList{}
 	partitions := &slurmtypes.V0041PartitionInfoList{}
@@ -104,24 +98,24 @@ func TestSlurmParse(t *testing.T) {
 // a Slurm client.
 func TestSlurmClient(t *testing.T) {
 	os.Unsetenv("SLURM_JWT")
-	sc := NewSlurmCollector(name, exporter_url, cacheFreq, false)
+	sc := NewSlurmCollector(exporter_url, cacheFreq, false)
 	err := sc.SlurmClient()
 	assert.NotNil(t, err)
 
 	os.Setenv("SLURM_JWT", "")
-	sc = NewSlurmCollector(name, exporter_url, cacheFreq, false)
+	sc = NewSlurmCollector(exporter_url, cacheFreq, false)
 	err = sc.SlurmClient()
 	assert.NotNil(t, err)
 
 	os.Setenv("SLURM_JWT", "foo")
-	sc = NewSlurmCollector(name, "", cacheFreq, false)
+	sc = NewSlurmCollector("", cacheFreq, false)
 	err = sc.SlurmClient()
 	assert.NotNil(t, err)
 
-	sc = NewSlurmCollector(name, exporter_url, cacheFreq, false)
+	sc = NewSlurmCollector(exporter_url, cacheFreq, false)
 	err = sc.SlurmClient()
 	assert.Equal(t, nil, err)
-	assert.NotNil(t, sc.slurmClusters.Get(name))
+	assert.NotNil(t, sc.slurmClient)
 }
 
 // TestSlurmCollectType will test that slurmCollectType returns
@@ -151,7 +145,7 @@ func TestSlurmCollectType(t *testing.T) {
 			return errors.New("error")
 		},
 	}
-	sc.slurmClusters.Add(name, newFakeClientList(interceptorFunc))
+	sc.slurmClient = newFakeClientList(interceptorFunc)
 	err = sc.slurmCollectType(jobsTest)
 	assert.NotEqual(t, nil, err)
 }
@@ -174,7 +168,7 @@ func TestCollect(t *testing.T) {
 			return nil
 		},
 	}
-	sc.slurmClusters.Add(name, newFakeClientList(interceptorFunc))
+	sc.slurmClient = newFakeClientList(interceptorFunc)
 	sc.Collect(c)
 
 	interceptorFunc = interceptor.Funcs{
@@ -185,7 +179,7 @@ func TestCollect(t *testing.T) {
 			return nil
 		},
 	}
-	sc.slurmClusters.Add(name, newFakeClientList(interceptorFunc))
+	sc.slurmClient = newFakeClientList(interceptorFunc)
 	sc.Collect(c)
 
 	interceptorFunc = interceptor.Funcs{
@@ -196,7 +190,7 @@ func TestCollect(t *testing.T) {
 			return nil
 		},
 	}
-	sc.slurmClusters.Add(name, newFakeClientList(interceptorFunc))
+	sc.slurmClient = newFakeClientList(interceptorFunc)
 	sc.Collect(c)
 
 	sc = newSlurmCollectorHelper()
@@ -219,7 +213,7 @@ func TestDescribe(t *testing.T) {
 	c := make(chan *prometheus.Desc)
 	var desc *prometheus.Desc
 	var numDesc int
-	sc := NewSlurmCollector(name, exporter_url, cacheFreq, false)
+	sc := NewSlurmCollector(exporter_url, cacheFreq, false)
 
 	go func() {
 		sc.Describe(c)
@@ -236,10 +230,9 @@ func TestDescribe(t *testing.T) {
 // TestNewSlurmCollector will test that NewSlurmCollector
 // returns the correct SlurmCollector.
 func TestNewSlurmCollector(t *testing.T) {
-	sc := NewSlurmCollector(name, exporter_url, cacheFreq, false)
+	sc := NewSlurmCollector(exporter_url, cacheFreq, false)
 
 	assert.Equal(t, exporter_url, sc.server)
-	assert.Equal(t, name, sc.name)
 	assert.Equal(t, cacheFreq, sc.cacheFreq)
 	assert.Equal(t, false, sc.perUserMetrics)
 }
