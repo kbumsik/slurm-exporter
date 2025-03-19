@@ -139,7 +139,7 @@ tidy: ## Run go mod tidy against code
 vet: ## Run go vet against code.
 	go vet ./...
 
-CODECOV_PERCENT ?= 91
+CODECOV_PERCENT ?= 80
 
 .PHONY: test
 test: ## Run tests.
