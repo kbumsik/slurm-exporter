@@ -50,6 +50,17 @@ test:
       - cover.html
       - govulnreport.txt
 
+include:
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+secret_detection:
+  stage: test
+  allow_failure: false
+  artifacts:
+    when: on_failure
+    expire_in: 7 days
+    paths:
+      - gl-secret-detection-report.json
+
 build:
   stage: build
   extends: .docker
@@ -112,13 +123,3 @@ release:
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
-
-include:
-  - template: Jobs/Secret-Detection.gitlab-ci.yml
-secret_detection:
-  allow_failure: false
-  artifacts:
-    when: on_failure
-    expire_in: 7 days
-    paths:
-      - gl-secret-detection-report.json
