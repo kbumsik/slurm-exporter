@@ -13,15 +13,3 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 ### Removed
-
-## v0.2.0
-
-### Added
-
-- Added container image labels.
-
-### Fixed
-
-### Changed
-
-### Removed
