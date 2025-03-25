@@ -59,13 +59,14 @@ all: build ## Build slurm-exporter.
 REGISTRY ?= slinky.slurm.net
 
 .PHONY: build
-build: fmt tidy vet ## Build manager binary.
+build: ## Build manager binary.
 	$(MAKE) docker-build IMG="$(REGISTRY)/slurm-exporter:$(VERSION)"
-	helm package helm/slurm-exporter --destination helm/slurm-exporter
+	helm package helm/slurm-exporter
 
 .PHONY: push
 push: build ## Push container images.
 	$(MAKE) docker-push IMG="$(REGISTRY)/slurm-exporter:$(VERSION)"
+	$(foreach chart, $(wildcard ./*.tgz), helm push ${chart} oci://$(REGISTRY)/charts ;)
 
 .PHONY: clean
 clean: ## Clean executable files.
@@ -73,7 +74,7 @@ clean: ## Clean executable files.
 	rm -rf bin/
 	rm -f govulnreport.txt
 	rm -f cover.out cover.html
-	rm -f helm/slurm-exporter/*.tgz
+	rm -f *.tgz
 
 .PHONY: run
 run: fmt tidy vet ## Run the exporter from your host.
@@ -83,7 +84,7 @@ run: fmt tidy vet ## Run the exporter from your host.
 # (i.e. docker build --platform linux/arm64 ). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build $(CONTAINER_BUILD_FLAGS) -t ${IMG} .
 
 .PHONY: docker-push
