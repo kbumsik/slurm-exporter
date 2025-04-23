@@ -6,7 +6,11 @@ package exporter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +27,8 @@ var (
 	partitionLabel = []string{"partition"}
 	nodeLabel      = []string{"node"}
 	jobLabel       = []string{"user"}
+	jobInfoLabels  = []string{"id", "name", "state", "user", "node"}
+	nodeRangeRegex = regexp.MustCompile(`(.*?)\[([0-9,\-]+)\](.*)`)
 )
 
 type PartitionData struct {
@@ -99,6 +105,7 @@ type SlurmCollector struct {
 	userPendingJobs          *prometheus.Desc
 	userRunningJobs          *prometheus.Desc
 	userHoldJobs             *prometheus.Desc
+	nodeJobInfo              *prometheus.Desc
 }
 
 // Initialize the slurm client to talk to slurmrestd.
@@ -320,6 +327,7 @@ func NewSlurmCollector(slurmClient client.Client, perUserMetrics bool) *SlurmCol
 		userPendingJobs:          prometheus.NewDesc("slurm_user_pending_jobs", "Number of pending jobs for a slurm user", jobLabel, nil),
 		userRunningJobs:          prometheus.NewDesc("slurm_user_running_jobs", "Number of running jobs for a slurm user", jobLabel, nil),
 		userHoldJobs:             prometheus.NewDesc("slurm_user_hold_jobs", "Number of hold jobs for a slurm user", jobLabel, nil),
+		nodeJobInfo:              prometheus.NewDesc("slurm_node_job_info", "Information about a slurm job in a node", jobInfoLabels, nil),
 	}
 }
 
@@ -352,6 +360,150 @@ func (s *SlurmCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s.userRunningJobs
 	ch <- s.userPendingJobs
 	ch <- s.userHoldJobs
+}
+
+// parseNodeRange expands a Slurm node specification string which might include
+// comma-separated nodes and complex bracket expressions like "compute-[1,3-5],login-[01-02],node7"
+// into a list of individual node names.
+// It prioritizes finding and expanding bracket expressions first.
+func parseNodeRange(nodeStr string) ([]string, error) {
+	var expandedNodes []string
+	remainingStr := nodeStr
+
+	for {
+		match := nodeRangeRegex.FindStringSubmatch(remainingStr)
+
+		if len(match) != 4 {
+			// No more bracket expressions found in the remainder
+			break
+		}
+
+		preMatch := match[1] // String before the current bracket expression
+		prefix := preMatch   // The actual prefix for the nodes generated from this bracket
+		innerContent := match[2]
+		suffix := match[3] // String after the current bracket expression
+
+		// Process the part *before* the current bracket match
+		if strings.Contains(preMatch, ",") {
+			// If the pre-match part contains commas, split it and treat
+			// the last segment as the prefix for the current bracket group.
+			preParts := strings.Split(preMatch, ",")
+			for i := 0; i < len(preParts)-1; i++ {
+				node := strings.TrimSpace(preParts[i])
+				if node != "" {
+					if strings.ContainsAny(node, "[]") {
+						return nil, fmt.Errorf("unexpected brackets in node name segment %q from %q", node, nodeStr)
+					}
+					expandedNodes = append(expandedNodes, node)
+				}
+			}
+			prefix = strings.TrimSpace(preParts[len(preParts)-1])
+		} else {
+			// No comma in pre-match, the whole thing is the prefix
+			prefix = strings.TrimSpace(preMatch)
+		}
+
+		// --- Process the bracketed content [innerContent] ---
+		innerParts := strings.Split(innerContent, ",")
+		maxNumLen := 0 // Track max length for padding within this bracket group
+
+		// First pass over inner parts to determine padding
+		for _, innerPart := range innerParts {
+			innerPart = strings.TrimSpace(innerPart)
+			if innerPart == "" {
+				continue
+			}
+			if strings.Contains(innerPart, "-") {
+				rangeSplit := strings.SplitN(innerPart, "-", 2)
+				if len(rangeSplit) == 2 {
+					startStr := strings.TrimSpace(rangeSplit[0])
+					endStr := strings.TrimSpace(rangeSplit[1])
+					if _, err := strconv.Atoi(startStr); err != nil {
+						return nil, fmt.Errorf("invalid start range number %q in %q: %w", startStr, innerContent, err)
+					}
+					if _, err := strconv.Atoi(endStr); err != nil {
+						return nil, fmt.Errorf("invalid end range number %q in %q: %w", endStr, innerContent, err)
+					}
+					if len(endStr) > maxNumLen {
+						maxNumLen = len(endStr)
+					}
+					if len(startStr) > maxNumLen {
+						maxNumLen = len(startStr)
+					}
+				} else {
+					return nil, fmt.Errorf("invalid range format %q in %q", innerPart, innerContent)
+				}
+			} else { // Single number
+				if _, err := strconv.Atoi(innerPart); err != nil {
+					return nil, fmt.Errorf("invalid number %q in %q: %w", innerPart, innerContent, err)
+				}
+				if len(innerPart) > maxNumLen {
+					maxNumLen = len(innerPart)
+				}
+			}
+		}
+
+		if maxNumLen == 0 {
+			maxNumLen = 1
+		}
+		format := fmt.Sprintf("%%s%%0%dd", maxNumLen) // e.g., "%s%02d", suffix added later
+
+		// Second pass to generate nodes for this bracket group
+		for _, innerPart := range innerParts {
+			innerPart = strings.TrimSpace(innerPart)
+			if innerPart == "" {
+				continue
+			}
+			if strings.Contains(innerPart, "-") {
+				rangeSplit := strings.SplitN(innerPart, "-", 2)
+				startStr := strings.TrimSpace(rangeSplit[0])
+				endStr := strings.TrimSpace(rangeSplit[1])
+				start, _ := strconv.Atoi(startStr)
+				end, _ := strconv.Atoi(endStr)
+
+				if start > end {
+					return nil, fmt.Errorf("start range %d greater than end range %d in %q", start, end, innerContent)
+				}
+
+				for i := start; i <= end; i++ {
+					// Suffix is handled below when processing remainingStr
+					expandedNodes = append(expandedNodes, fmt.Sprintf(format, prefix, i))
+				}
+			} else { // Single number
+				num, _ := strconv.Atoi(innerPart)
+				expandedNodes = append(expandedNodes, fmt.Sprintf(format, prefix, num))
+			}
+		}
+		// --- End bracket processing ---
+
+		// Continue processing with the part *after* the current bracket match
+		remainingStr = suffix
+	}
+
+	// Process the final remaining part of the string (contains no brackets)
+	if remainingStr != "" {
+		finalParts := strings.Split(remainingStr, ",")
+		for _, node := range finalParts {
+			node = strings.TrimSpace(node)
+			if node != "" {
+				if strings.ContainsAny(node, "[]") {
+					return nil, fmt.Errorf("unexpected brackets in final node name segment %q from %q", node, nodeStr)
+				}
+				expandedNodes = append(expandedNodes, node)
+			}
+		}
+	}
+
+	if len(expandedNodes) == 0 && nodeStr != "" {
+		// Handle cases like "(null)" or other non-standard but single-value representations that don't match the regex.
+		// Check if it contains brackets - if so, it's likely an error or unsupported format.
+		if strings.ContainsAny(nodeStr, "[]") {
+			return nil, fmt.Errorf("failed to parse node string with brackets: %q", nodeStr)
+		}
+		return []string{nodeStr}, nil
+	}
+
+	return expandedNodes, nil
 }
 
 // Called by the Prometheus registry when collecting metrics.
@@ -412,6 +564,33 @@ func (s *SlurmCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(s.userPendingJobs, prometheus.GaugeValue, float64(slurmData.jobs[j].Pending), j)
 			ch <- prometheus.MustNewConstMetric(s.userRunningJobs, prometheus.GaugeValue, float64(slurmData.jobs[j].Running), j)
 			ch <- prometheus.MustNewConstMetric(s.userHoldJobs, prometheus.GaugeValue, float64(slurmData.jobs[j].Hold), j)
+		}
+	}
+	for _, j := range jobs.Items {
+		jobID := ptr.Deref(j.JobId, int32(0))
+		jobName := ptr.Deref(j.Name, "")
+		jobState := ""
+		if len(j.GetStateAsSet().UnsortedList()) > 0 {
+			jobState = string(j.GetStateAsSet().UnsortedList()[0])
+		}
+		userName := ptr.Deref(j.UserName, "")
+		jobNodeRaw := ptr.Deref(j.Nodes, "")
+
+		expandedNodes, err := parseNodeRange(jobNodeRaw)
+		if err != nil {
+			log.Error(err, "Failed to parse node range", "jobId", jobID, "nodeString", jobNodeRaw)
+			// Send metric with the original raw string if parsing fails
+			expandedNodes = []string{jobNodeRaw}
+		}
+
+		// Handle case where parseNodeRange returns empty for an empty input
+		if len(expandedNodes) == 0 && jobNodeRaw == "" {
+			expandedNodes = []string{""} // Ensure at least one metric is sent for jobs without nodes
+		}
+
+		for _, node := range expandedNodes {
+			ch <- prometheus.MustNewConstMetric(s.nodeJobInfo, prometheus.GaugeValue, 1,
+				fmt.Sprintf("%d", jobID), jobName, jobState, userName, node)
 		}
 	}
 }
