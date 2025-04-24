@@ -5,7 +5,7 @@
       "label": "Fetch SLURM_JWT",
       "type": "shell",
       "command": [
-        "export SLURM_JWT=\"$(kubectl --namespace=slurm get secrets slurm-token-slurm -o jsonpath=\"{.data.auth-token}\" | base64 --decode)\" &&",
+        "export \"$(scontrol token username=$USER lifespan=7776000)\" &&",
         "echo \"SLURM_JWT=$SLURM_JWT\" >/tmp/slurm-exporter.env"
       ],
       "presentation": {
