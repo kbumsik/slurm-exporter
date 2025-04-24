@@ -367,21 +367,37 @@ func (s *SlurmCollector) Describe(ch chan<- *prometheus.Desc) {
 // into a list of individual node names.
 // It prioritizes finding and expanding bracket expressions first.
 func parseNodeRange(nodeStr string) ([]string, error) {
+	trimmedNodeStr := strings.TrimSpace(nodeStr)
+	if trimmedNodeStr == "" {
+		// Treat empty string and whitespace-only string as invalid input.
+		return nil, fmt.Errorf("input node string is empty or consists only of whitespace: %q", nodeStr)
+	}
+	// Use trimmed string for processing, keep original for error messages
+	processingStr := trimmedNodeStr
+
 	var expandedNodes []string
-	remainingStr := nodeStr
+	remainingStr := processingStr // Start processing with the trimmed string
 
 	for {
 		match := nodeRangeRegex.FindStringSubmatch(remainingStr)
-
 		if len(match) != 4 {
-			// No more bracket expressions found in the remainder
-			break
+			break // No more bracket expressions found in the remainder
 		}
 
 		preMatch := match[1] // String before the current bracket expression
-		prefix := preMatch   // The actual prefix for the nodes generated from this bracket
 		innerContent := match[2]
 		suffix := match[3] // String after the current bracket expression
+
+		// --- NEW CHECK for trailing characters after brackets ---
+		// Valid suffixes must either be empty or start with a comma.
+		trimmedSuffix := strings.TrimSpace(suffix)
+		if trimmedSuffix != "" && !strings.HasPrefix(trimmedSuffix, ",") {
+			bracketPart := "[" + innerContent + "]"
+			return nil, fmt.Errorf("invalid node string format: trailing characters %q found immediately after bracket expression %q in original input %q", trimmedSuffix, bracketPart, nodeStr)
+		}
+		// --- END NEW CHECK ---
+
+		prefix := preMatch // The actual prefix for the nodes generated from this bracket (potentially updated below)
 
 		// Process the part *before* the current bracket match
 		if strings.Contains(preMatch, ",") {
@@ -477,7 +493,7 @@ func parseNodeRange(nodeStr string) ([]string, error) {
 		// --- End bracket processing ---
 
 		// Continue processing with the part *after* the current bracket match
-		remainingStr = suffix
+		remainingStr = suffix // Use the original suffix (not trimmed) for the next loop iteration
 	}
 
 	// Process the final remaining part of the string (contains no brackets)
@@ -494,13 +510,12 @@ func parseNodeRange(nodeStr string) ([]string, error) {
 		}
 	}
 
-	if len(expandedNodes) == 0 && nodeStr != "" {
-		// Handle cases like "(null)" or other non-standard but single-value representations that don't match the regex.
-		// Check if it contains brackets - if so, it's likely an error or unsupported format.
-		if strings.ContainsAny(nodeStr, "[]") {
-			return nil, fmt.Errorf("failed to parse node string with brackets: %q", nodeStr)
-		}
-		return []string{nodeStr}, nil
+	// If after all processing, the list is still empty but the input wasn't just whitespace, return an error.
+	if len(expandedNodes) == 0 {
+		// Note: processingStr is the trimmed version.
+		// We already handled the case where the original string was purely whitespace or empty.
+		// So if we reach here with no nodes, it means the input had content but it was invalid (e.g., ",,").
+		return nil, fmt.Errorf("input node string %q resulted in no valid node names", nodeStr) // Use original in error
 	}
 
 	return expandedNodes, nil
